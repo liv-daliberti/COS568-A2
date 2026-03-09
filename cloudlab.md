@@ -29,15 +29,17 @@ To run experiments efficiently, we suggest to follow the workflow below:
    ```bash
     sudo apt-get update
     sudo apt-get install htop dstat python3-pip
-    echo 'export PATH=$HOME/.local/bin:$PATH' >> ~/.bashrc
-    source ~/.bashrc
     
     pip install torch==2.5.0 torchvision==0.20.0 torchaudio==2.5.0 --index-url https://download.pytorch.org/whl/cpu
     pip install numpy scipy scikit-learn tqdm pytorch_transformers apex
    ```
 
 3. (Need to run every time when you start a new experiment) For each node, clone your git repo to your home directory. **Please don't use the shared space for your assignment.**
-4. (Need to run every time when you start a new experiment) Download GLUE/RTE data in your home directory on every node: `python3 download_glue_data.py --data_dir ~/glue_data`.
+4. (Need to run every time when you start a new experiment) Run setup from the repository root so all data/cache/output stay under your cloned repo directory:
+   ```bash
+   ./setup_local.sh
+   source ./env_local.sh
+   ```
 
 
 ## Policies on Using CloudLab Resources

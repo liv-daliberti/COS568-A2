@@ -24,17 +24,19 @@ You may choose to either use GPUs or CPUs for this project (**Using CPUs via Clo
   ```bash
   sudo apt-get update
   sudo apt-get install htop dstat python3-pip
-  echo 'export PATH=$HOME/.local/bin:$PATH' >> ~/.bashrc
-  source ~/.bashrc
 
   pip install torch==2.5.0 torchvision==0.20.0 torchaudio==2.5.0 --index-url https://download.pytorch.org/whl/cpu
   pip install numpy scipy scikit-learn tqdm pytorch_transformers apex
   ```
   - If you are using GPUs, install the appropriate PyTorch [here](https://pytorch.org/get-started/locally/).
+- To keep **all dependencies, caches, models, outputs, and data under this repo directory only**, run:
+  ```bash
+  ./setup_local.sh
+  source ./env_local.sh
+  ```
 -  You are only required to fine-tune RTE  (one of the datasets within GLUE) in this assignment, use the python script `download_glue_data.py` to download the dataset. If you are not running experiments via CloudLab, use this command to download datasets within GLUE: 
     ```bash
-    mkdir glue_data
-    python3 download_glue_data.py --data_dir glue_data
+    python3 download_glue_data.py --data_dir ./glue_data --tasks RTE
     ```
 
 
@@ -45,7 +47,7 @@ We have provided a base script ([`run_glue_skeleton.py`](run_glue_skeleton.py)) 
 Here is a command you can use to run `run_glue.py` (remember to rename the `run_glue_skeleton.py` to `run_glue.py` after adding the necessary code):
 
 ```shell
-export GLUE_DIR=$HOME/glue_data
+export GLUE_DIR=$PWD/glue_data
 export TASK_NAME=RTE
 
 python3 run_glue.py \
@@ -59,7 +61,8 @@ python3 run_glue.py \
   --per_device_train_batch_size 64 \
   --learning_rate 2e-5 \
   --num_train_epochs 3 \
-  --output_dir /tmp/$TASK_NAME/ \
+  --output_dir $PWD/outputs/$TASK_NAME \
+  --cache_dir $PWD/hf_cache \
   --overwrite_output_dir
 ```
 

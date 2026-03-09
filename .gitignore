@@ -1,2 +1,13 @@
-/__pycache__
+__pycache__/
+*.pyc
 *.out
+report/*.aux
+report/*.log
+QNLI.zip
+/.venv_cos568/
+/logs/
+/outputs/
+/glue_data/
+/hf_cache/
+/.cache/
+/.tmp/
