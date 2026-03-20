@@ -2,318 +2,204 @@
 \usepackage[margin=1in]{geometry}
 \usepackage{graphicx}
 \usepackage{booktabs}
-\usepackage{array}
 \usepackage{float}
 \usepackage{amsmath}
 \usepackage{hyperref}
-\usepackage{longtable}
 \title{COS 568 Assignment 2: Distributed Training of Language Models}
 \author{NetID: od2961 \quad Liv d'Aliberti}
-\date{\today}
+\date{March 11, 2026}
 
 \begin{document}
 \maketitle
 
 \section{Setup and Reproducibility}
-\textbf{Environment.} I ran both CPU and GPU experiments.
-
 \begin{itemize}
-\item CPU validation runs: 1 node (\texttt{node202}), 4 local ranks (\texttt{world\_size=4}, backend \texttt{gloo})
-\item Multi-node distributed runs (\texttt{account=mltheory}): 4 nodes, 4 ranks (\texttt{world\_size=4}, backend \texttt{nccl})
-\item Hardware: Intel Xeon Silver 4316 CPU nodes and 1-GPU-per-node cluster nodes
-\item Backends: \texttt{gloo} (CPU) and \texttt{nccl} (GPU)
-\item PyTorch version: \texttt{2.9.1+cu128}
-\item Seed: \texttt{42}
-\item Commit hash: \texttt{6bc06de}
+\item Task 1 CPU run: 1 node (node202), backend \texttt{gloo}-free single-process training.
+\item Task 1 GPU run: 1 node (node915), single GPU.
+\item CPU distributed timing runs: Tasks 2(a), 2(b), and 3 on \texttt{node202, node203, node204, node206}; 1 rank per node, backend \texttt{gloo}.
+\item CPU Task 4 profiling runs: \texttt{node701, node702, node703, node704}; 1 rank per node, backend \texttt{gloo}.
+\item Multi-node GPU distributed runs: 4 nodes, 4 ranks, 1 rank per node, backend \texttt{nccl}.
+\item GPU distributed nodes: \texttt{node105, node915, node916, node917}
+\item Seed: \texttt{42}, PyTorch version: \texttt{2.9.1+cu128}, commit: \texttt{4444ce4}.
 \end{itemize}
 
-\section{Task 1: Single-Node Fine-Tuning (3 Epochs)}
-\subsection{Configuration}
-Model: \texttt{bert-base-cased}, Dataset: \texttt{RTE}, total batch size: 64, learning rate: \(2\times 10^{-5}\), epochs: 3.
-
-\subsection{Evaluation Metric After Each Epoch}
+\section{Task 1: Single-Node Fine-Tuning}
 \begin{table}[H]
 \centering
-\begin{tabular}{cccc}
+\begin{tabular}{ccc}
 \toprule
-Epoch & CPU acc & GPU acc & Notes \\
+Epoch & CPU acc & GPU acc \\
 \midrule
-1 & 0.5956678700 & 0.6245487365 & CPU: \texttt{27275076}, GPU: \texttt{27276513} \\
-2 & 0.6534296029 & 0.6245487365 & CPU: \texttt{27275076}, GPU: \texttt{27276513} \\
-3 & 0.6714801444 & 0.6389891697 & CPU: \texttt{27275076}, GPU: \texttt{27276513} \\
+1 & 0.5920577617 & 0.5740072202 \\
+2 & 0.6462093863 & 0.6389891697 \\
+3 & 0.6534296029 & 0.6606498195 \\
 \bottomrule
 \end{tabular}
-\caption{Task 1 evaluation metric after every epoch (CPU vs GPU).}
+\caption{Task 1 evaluation accuracy after each epoch.}
 \end{table}
 
-\subsection{First Five Minibatch Losses}
 \begin{table}[H]
 \centering
 \begin{tabular}{ccc}
 \toprule
 Minibatch & CPU loss & GPU loss \\
 \midrule
-1 & 0.788234 & 0.767811 \\
-2 & 0.778575 & 0.778254 \\
-3 & 0.717356 & 0.712150 \\
-4 & 0.760002 & 0.715338 \\
-5 & 0.721060 & 0.700909 \\
+1 & 0.748251 & 0.778352 \\
+2 & 0.797213 & 0.785116 \\
+3 & 0.708992 & 0.688311 \\
+4 & 0.755476 & 0.738948 \\
+5 & 0.740575 & 0.708527 \\
 \bottomrule
 \end{tabular}
-\caption{Task 1 first five minibatch losses (CPU vs GPU).}
+\caption{Task 1 first five minibatch losses.}
 \end{table}
 
-\subsection{Why These Task 1 Numbers Are Correct}
-\begin{itemize}
-\item The runs were executed with the required Task 1 setting \texttt{num\_train\_epochs=3}; logs show
-\texttt{Epoch: 100\% ... 3/3} for both CPU and GPU Task 1 jobs.
-\item Reported epoch metrics are taken directly from \texttt{acc = ...} lines in the corresponding Slurm logs
-(\texttt{logs/cos568-task1-rte-27275076.err} for CPU and \texttt{logs/cos568-task1-rte-27276513.err} for GPU).
-\item The first five minibatch losses are emitted by explicit code logic (\texttt{printed\_minibatches < 5}),
-so exactly five values are printed and recorded from each run.
-\end{itemize}
-
-\section{Tasks 2(a), 2(b), and 3 (1 Epoch Each)}
-\subsection{Timing Method}
-I instrumented the training loop with \texttt{time.perf\_counter()} and logged per-step times to
-\texttt{outputs/report\_runs*/task*/metrics/rankX\_train\_metrics.json}. For each rank, I discarded
-iteration 1 and averaged over iterations 2--39 (38 timed iterations). The table reports the mean across ranks.
-
+\section{Tasks 2(a), 2(b), and 3}
 \begin{table}[H]
 \centering
 \begin{tabular}{lcccc}
 \toprule
-Hardware & Task & Communication Method & Avg Iter Time (s) & Timed Iterations \\
+Hardware & Task & Method & Avg iter time (s) & Timed iters \\
 \midrule
-CPU & 2(a) & gather+scatter & 8.701370 & 38 \\
-CPU & 2(b) & all\_reduce & 7.436149 & 38 \\
-CPU & 3 & DDP & 7.018130 & 38 \\
-GPU & 2(a) & gather+scatter & 2.316786 & 38 \\
-GPU & 2(b) & all\_reduce & 0.764416 & 38 \\
-GPU & 3 & DDP & 0.638542 & 38 \\
+CPU & 2(a) & gather+scatter & 5.513219 & 38 \\
+CPU & 2(b) & all\_reduce & 3.957924 & 38 \\
+CPU & 3 & DDP & 3.322300 & 38 \\
+GPU & 2(a) & gather+scatter & 2.335618 & 38 \\
+GPU & 2(b) & all\_reduce & 0.930466 & 38 \\
+GPU & 3 & DDP & 0.680639 & 38 \\
 \bottomrule
 \end{tabular}
-\caption{Average time per iteration after dropping first iteration (CPU vs GPU).}
+\caption{Average iteration time after dropping the first iteration.}
 \end{table}
 
-\subsection{Loss Curves Per Node}
+CPU Task 2(a) vs 2(b) max per-step loss difference: 1.788e-07.\\
+GPU Task 2(a) vs 2(b) max per-step loss difference: 1.788e-07.
+
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.9\linewidth]{../outputs/task4/gather_scatter/figures/loss_curve_all_ranks.png}
-\caption{Task 2(a): per-rank loss curves.}
+\begin{minipage}[t]{0.48\linewidth}
+\centering
+\textbf{CPU Task 2(a)}\\[0.3em]
+\includegraphics[width=\linewidth]{../outputs/report_runs_cpu_nodes/task2a/figures/loss_curve_all_ranks.png}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.48\linewidth}
+\centering
+\textbf{GPU Task 2(a)}\\[0.3em]
+\includegraphics[width=\linewidth]{../outputs/report_runs_gpu_nodes/task2a/figures/loss_curve_all_ranks.png}
+\end{minipage}
+\caption{Task 2(a) loss curves across all ranks.}
 \end{figure}
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.9\linewidth]{../outputs/task4/all_reduce/figures/loss_curve_all_ranks.png}
-\caption{Task 2(b): per-rank loss curves.}
+\begin{minipage}[t]{0.48\linewidth}
+\centering
+\textbf{CPU Task 2(b)}\\[0.3em]
+\includegraphics[width=\linewidth]{../outputs/report_runs_cpu_nodes/task2b/figures/loss_curve_all_ranks.png}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.48\linewidth}
+\centering
+\textbf{GPU Task 2(b)}\\[0.3em]
+\includegraphics[width=\linewidth]{../outputs/report_runs_gpu_nodes/task2b/figures/loss_curve_all_ranks.png}
+\end{minipage}
+\caption{Task 2(b) loss curves across all ranks.}
 \end{figure}
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.9\linewidth]{../outputs/task4/ddp/figures/loss_curve_all_ranks.png}
-\caption{Task 3 (DDP): per-rank loss curves.}
-\end{figure}
-
-CPU Task 2(a) and 2(b) match up to numerical precision: max absolute per-step loss difference across all ranks is
-\(2.09\times 10^{-6}\), so the curves are effectively identical.
-
-\begin{figure}[H]
+\begin{minipage}[t]{0.48\linewidth}
 \centering
-\includegraphics[width=0.9\linewidth]{../outputs/task4_gpu/gather_scatter/figures/loss_curve_all_ranks.png}
-\caption{GPU Task 2(a): per-rank loss curves.}
-\end{figure}
-
-\begin{figure}[H]
+\textbf{CPU Task 3}\\[0.3em]
+\includegraphics[width=\linewidth]{../outputs/report_runs_cpu_nodes/task3/figures/loss_curve_all_ranks.png}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.48\linewidth}
 \centering
-\includegraphics[width=0.9\linewidth]{../outputs/task4_gpu/all_reduce/figures/loss_curve_all_ranks.png}
-\caption{GPU Task 2(b): per-rank loss curves.}
+\textbf{GPU Task 3}\\[0.3em]
+\includegraphics[width=\linewidth]{../outputs/report_runs_gpu_nodes/task3/figures/loss_curve_all_ranks.png}
+\end{minipage}
+\caption{Task 3 loss curves across all ranks.}
 \end{figure}
-
-\begin{figure}[H]
-\centering
-\includegraphics[width=0.9\linewidth]{../outputs/task4_gpu/ddp/figures/loss_curve_all_ranks.png}
-\caption{GPU Task 3 (DDP): per-rank loss curves.}
-\end{figure}
-
-For GPU runs, Task 2(a) and 2(b) are close but not identical in this environment; max absolute per-step loss
-difference across ranks is \(8.86\times 10^{-2}\). The CPU result above is the primary correctness check for the
-Task 2(a)/2(b) equivalence requirement.
-
-\subsection{Why These Task 2/3 Numbers Are Correct}
-\begin{itemize}
-\item All Task 2/3 runs used the required 1-epoch setup (\texttt{num\_train\_epochs=1}) and total batch size 64
-(\texttt{per\_device\_train\_batch\_size=16}, \texttt{world\_size=4}).
-\item Timing values come from per-rank JSON metric files written by each worker at every optimizer step, then
-aggregated by dropping step 1 and averaging steps 2--39 (38 timed iterations), exactly matching the assignment rule.
-\item CPU Task 2(a) vs 2(b) agreement is numerically validated: max absolute per-step loss difference is
-\(2.09\times 10^{-6}\), which confirms the two sync implementations are equivalent under the same settings.
-\item GPU Task 2(a) vs 2(b) is reported as an additional multi-node measurement; its non-zero gap
-\(8.86\times 10^{-2}\) is documented transparently and not used as the primary equivalence claim.
-\end{itemize}
 
 \section{Task 4: Profiling and Communication Overhead}
-Profile schedule: skip first training step, record next 3 steps.
-
-\subsection{Trace Files}
-\begin{itemize}
-\item \texttt{outputs/task4/gather\_scatter/traces/rank0\_step\_window.json}
-\item \texttt{outputs/task4/all\_reduce/traces/rank0\_step\_window.json}
-\item \texttt{outputs/task4/ddp/traces/rank0\_step\_window.json}
-\item \texttt{outputs/task4\_gpu/gather\_scatter/traces/rank0\_step\_window.json}
-\item \texttt{outputs/task4\_gpu/all\_reduce/traces/rank0\_step\_window.json}
-\item \texttt{outputs/task4\_gpu/ddp/traces/rank0\_step\_window.json}
-\end{itemize}
-
-\subsection{Profiler Figures}
-\begin{figure}[H]
-\centering
-\includegraphics[width=0.95\linewidth]{../outputs/task4/gather_scatter/figures/rank0_steps1to3_overview.png}
-\caption{Gather/Scatter timeline overview (rank 0, profiled 3-step window).}
-\end{figure}
-
-\begin{figure}[H]
-\centering
-\includegraphics[width=0.95\linewidth]{../outputs/task4/all_reduce/figures/rank0_steps1to3_overview.png}
-\caption{AllReduce timeline overview (rank 0, profiled 3-step window).}
-\end{figure}
-
-\begin{figure}[H]
-\centering
-\includegraphics[width=0.95\linewidth]{../outputs/task4/ddp/figures/rank0_steps1to3_overview.png}
-\caption{DDP timeline overview (rank 0, profiled 3-step window).}
-\end{figure}
-
-\subsection{Communication Overhead per Step}
-For each method, compute:
-\[
-\text{Comm Overhead (\%)} = \frac{\text{Communication Time}}{\text{Total Step Time}} \times 100
-\]
-
 \begin{table}[H]
 \centering
 \begin{tabular}{lcccc}
 \toprule
-Method & Step & Total Time (ms) & Comm Time (ms) & Comm Overhead (\%) \\
+Hardware & Method & Step & Total ms & Comm ms / pct \\
 \midrule
-gather+scatter & 1 & 7931.792 & 887.145 & 11.185 \\
-gather+scatter & 2 & 7720.426 & 876.275 & 11.350 \\
-gather+scatter & 3 & 7789.079 & 887.635 & 11.396 \\
-all\_reduce & 1 & 7222.532 & 759.826 & 10.520 \\
-all\_reduce & 2 & 7135.311 & 707.751 & 9.919 \\
-all\_reduce & 3 & 7244.948 & 718.222 & 9.913 \\
-DDP & 1 & 7782.434 & 806.481 & 10.363 \\
-DDP & 2 & 7546.533 & 811.202 & 10.749 \\
-DDP & 3 & 7556.739 & 690.132 & 9.133 \\
+CPU & gather\_scatter & 1 & 27025.274 & 21229.106 / 78.553\% \\
+CPU & gather\_scatter & 2 & 27012.713 & 21243.450 / 78.642\% \\
+CPU & gather\_scatter & 3 & 27019.735 & 21237.381 / 78.600\% \\
+CPU & all\_reduce & 1 & 11033.723 & 5551.403 / 50.313\% \\
+CPU & all\_reduce & 2 & 11031.779 & 5553.455 / 50.341\% \\
+CPU & all\_reduce & 3 & 11086.272 & 5557.129 / 50.126\% \\
+CPU & ddp & 1 & 8296.159 & 5298.015 / 63.861\% \\
+CPU & ddp & 2 & 8123.591 & 5267.552 / 64.843\% \\
+CPU & ddp & 3 & 8153.338 & 5276.082 / 64.711\% \\
+GPU & gather\_scatter & 1 & 2874.860 & 2139.384 / 74.417\% \\
+GPU & gather\_scatter & 2 & 2332.101 & 2174.620 / 93.247\% \\
+GPU & gather\_scatter & 3 & 2325.256 & 2168.194 / 93.245\% \\
+GPU & all\_reduce & 1 & 859.100 & 716.353 / 83.384\% \\
+GPU & all\_reduce & 2 & 895.525 & 754.992 / 84.307\% \\
+GPU & all\_reduce & 3 & 897.617 & 760.135 / 84.684\% \\
+GPU & ddp & 1 & 728.845 & 653.159 / 89.616\% \\
+GPU & ddp & 2 & 717.997 & 647.054 / 90.119\% \\
+GPU & ddp & 3 & 707.342 & 635.475 / 89.840\% \\
 \bottomrule
 \end{tabular}
-\caption{Per-step communication overhead for Task 4.}
+\caption{Per-step communication overhead from the profiled three-step windows.}
 \end{table}
 
-\subsection{Why These CPU Profiling Numbers Are Correct}
-\begin{itemize}
-\item Profiling used \texttt{wait=1, warmup=0, active=3}, so the first training step is skipped and exactly three
-training steps are measured, matching the requirement.
-\item For each \texttt{ProfilerStep\#k}, communication time is computed from the union of overlapping communication
-events within the step window (to avoid double-counting overlapped collectives).
-\item CPU communication events are identified from Gloo trace names (\texttt{gloo:gather}, \texttt{gloo:scatter},
-\texttt{gloo:all\_reduce}, plus DDP-relevant collectives), and the resulting tables are saved as CSV artifacts.
-\end{itemize}
-
-\subsection{AllReduce vs DDP Efficiency}
-\begin{itemize}
-\item Average comm overhead (all\_reduce): 10.118\%
-\item Average comm overhead (DDP): 10.082\%
-\item Relative DDP improvement:
-\[
-\frac{\text{all\_reduce} - \text{DDP}}{\text{all\_reduce}} \times 100 = 0.355\%
-\]
-\item DDP is slightly more efficient here because its reducer does optimized bucketing and can overlap gradient
-communication with parts of backpropagation. On this CPU + gloo setup and small BERT fine-tuning workload, the gain
-in communication-overhead percentage is modest.
-\end{itemize}
-
-\subsection{GPU Communication Overhead per Step}
-\begin{table}[H]
+\begin{figure}[H]
 \centering
-\begin{tabular}{lcccc}
-\toprule
-Method & Step & Total Time (ms) & Comm Time (ms) & Comm Overhead (\%) \\
-\midrule
-gather+scatter & 1 & 2293.767 & 2185.234 & 95.268 \\
-gather+scatter & 2 & 2305.058 & 2198.570 & 95.380 \\
-gather+scatter & 3 & 2297.723 & 2190.178 & 95.320 \\
-all\_reduce & 1 & 734.289 & 638.999 & 87.023 \\
-all\_reduce & 2 & 751.888 & 658.686 & 87.604 \\
-all\_reduce & 3 & 751.613 & 658.474 & 87.608 \\
-DDP & 1 & 638.919 & 583.642 & 91.348 \\
-DDP & 2 & 663.478 & 611.747 & 92.203 \\
-DDP & 3 & 663.276 & 610.783 & 92.086 \\
-\bottomrule
-\end{tabular}
-\caption{GPU per-step communication overhead from Task 4 traces.}
-\end{table}
+\begin{minipage}[t]{0.48\linewidth}
+\centering
+\textbf{CPU gather scatter}\\[0.3em]
+\includegraphics[width=\linewidth]{../outputs/task4_cpu_nodes/gather_scatter/figures/rank0_steps1to3_overview.png}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.48\linewidth}
+\centering
+\textbf{GPU gather scatter}\\[0.3em]
+\includegraphics[width=\linewidth]{../outputs/task4_gpu_nodes/gather_scatter/figures/rank0_steps1to3_overview.png}
+\end{minipage}
+\caption{Profiler overview for gather scatter over profiled steps 1-3.}
+\end{figure}
 
-\subsection{Why These GPU Profiling Numbers Are Correct}
-\begin{itemize}
-\item GPU traces were generated from successful profiling jobs with fresh, non-conflicting master ports and saved to
-\texttt{outputs/task4\_gpu/*/traces/rank0\_step\_window.json}.
-\item GPU communication events are measured from NCCL trace names (\texttt{nccl:gather}, \texttt{nccl:scatter},
-\texttt{nccl:all\_reduce}, \texttt{nccl:broadcast}), not Gloo names.
-\item The profiler emits duplicate \texttt{ProfilerStep} slices in these GPU traces; step windows were deduplicated
-by step id (keeping the longest slice per step) before computing percentages, so each reported step is counted once.
-\item The computed CSV tables and JSON summary are written to
-\texttt{outputs/task4\_gpu/*/tables/comm\_overhead\_per\_step.csv} and
-\texttt{outputs/task4\_gpu/comm\_overhead\_summary.json}.
-\end{itemize}
+\begin{figure}[H]
+\centering
+\begin{minipage}[t]{0.48\linewidth}
+\centering
+\textbf{CPU all reduce}\\[0.3em]
+\includegraphics[width=\linewidth]{../outputs/task4_cpu_nodes/all_reduce/figures/rank0_steps1to3_overview.png}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.48\linewidth}
+\centering
+\textbf{GPU all reduce}\\[0.3em]
+\includegraphics[width=\linewidth]{../outputs/task4_gpu_nodes/all_reduce/figures/rank0_steps1to3_overview.png}
+\end{minipage}
+\caption{Profiler overview for all reduce over profiled steps 1-3.}
+\end{figure}
 
-\subsection{GPU AllReduce vs DDP}
-\begin{itemize}
-\item Average GPU comm overhead (all\_reduce): 87.412\%
-\item Average GPU comm overhead (DDP): 91.879\%
-\item Relative DDP improvement metric:
-\[
-\frac{\text{all\_reduce} - \text{DDP}}{\text{all\_reduce}} \times 100 = -5.111\%
-\]
-\item In this GPU run, DDP shows higher communication-overhead percentage than all\_reduce by this metric.
-However, DDP still has lower overall iteration time in the timing table, so end-to-end throughput remains better.
-\end{itemize}
+\begin{figure}[H]
+\centering
+\begin{minipage}[t]{0.48\linewidth}
+\centering
+\textbf{CPU ddp}\\[0.3em]
+\includegraphics[width=\linewidth]{../outputs/task4_cpu_nodes/ddp/figures/rank0_steps1to3_overview.png}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.48\linewidth}
+\centering
+\textbf{GPU ddp}\\[0.3em]
+\includegraphics[width=\linewidth]{../outputs/task4_gpu_nodes/ddp/figures/rank0_steps1to3_overview.png}
+\end{minipage}
+\caption{Profiler overview for ddp over profiled steps 1-3.}
+\end{figure}
 
 \section{Discussion}
-\subsection{Differences Across Setups}
-For CPU runs, Task 2(a) is the slowest because gather/scatter centralizes synchronization at rank 0, creating a
-bottleneck. Task 2(b) removes this bottleneck with all-reduce and is 14.54\% faster than CPU 2(a); CPU DDP is a
-further 5.62\% faster than CPU 2(b).
-For GPU runs, all methods are much faster than CPU: GPU speedup is 3.76x (2a), 9.73x (2b), and 10.99x (3) relative
-to CPU timings. For Task 4 communication-overhead percentage, GPU DDP was not lower than GPU all-reduce in this
-measurement, but DDP still improved end-to-end iteration time.
+The old CPU numbers in this repo came from a one-node debug launcher. The rerun above uses true multi-node CPU and GPU jobs with 1 rank per node. GPU training is still faster end-to-end: the new GPU speedups over CPU are 2.36x for Task 2(a), 4.25x for Task 2(b), and 4.88x for Task 3.
 
-\subsection{Scalability of Distributed ML}
-The CPU profiling results show communication remains a meaningful fraction of each step (\(\sim 10\%\) for
-all-reduce/DDP, \(\sim 11.3\%\) for gather/scatter). As worker count increases, synchronization overhead can limit scaling unless
-communication is optimized and overlapped with compute. In this small-model CPU regime, optimization of collectives
-matters immediately. On GPU, communication dominates the profiled windows by this trace-derived metric, which indicates
-that collective efficiency and overlap strategy strongly influence scalability.
+CPU Task 2(b) is 28.21\% faster than CPU Task 2(a), and CPU DDP is another 16.06\% faster than CPU all-reduce on the same 4-node allocation.
 
-\subsection{Connection to PyTorch Distributed (VLDB'18)}
-The results align with the PyTorch Distributed design rationale: replacing centralized synchronization with collective
-all-reduce improves scalability, and DDP's reducer/bucketing machinery helps reduce training-step cost further by
-overlapping communication and computation where possible.
-
-\section{Implementation Details}
-\begin{itemize}
-\item Task 1: implemented backward pass and optimizer step in the training loop; printed first 5 minibatch losses;
-ran 3 epochs with per-epoch evaluation.
-\item Task 2(a): implemented manual gradient synchronization using \texttt{torch.distributed.gather} and
-\texttt{torch.distributed.scatter}.
-\item Task 2(b): implemented manual gradient synchronization using \texttt{torch.distributed.all\_reduce}
-followed by division by world size.
-\item Task 3: wrapped model with \texttt{DistributedDataParallel} for automatic gradient synchronization.
-\item Task 4: added profiler schedule (wait=1, warmup=0, active=3, repeat=1), exported Chrome traces, and computed
-per-step communication overhead from trace events.
-\item Additional instrumentation: logged per-rank per-step loss and timing to JSON for timing tables and loss-curve
-plots used in this report, for both CPU and GPU runs.
-\item Slurm execution: updated scripts to use \texttt{\#SBATCH --account=mltheory} for GPU submissions.
-\end{itemize}
+For Task 4, CPU DDP has an average communication-overhead percentage of 64.471\% versus 50.260\% for manual all-reduce, a relative reduction of -28.276\%. On GPU, the same trace-derived metric is 89.858\% for DDP versus 84.125\% for all-reduce, so the relative reduction is -6.815\%. Even when the GPU trace metric is not lower for DDP, DDP still wins on end-to-end iteration time.
 
 \end{document}

@@ -1,6 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=cos568-task2a-rte-cpu
-#SBATCH --account=mltheory
+#SBATCH --partition=cs
+#SBATCH --account=allcs
 #SBATCH --nodes=1
 #SBATCH --ntasks=4
 #SBATCH --ntasks-per-node=4
@@ -12,9 +13,13 @@
 
 set -euo pipefail
 
-REPO_DIR="${SLURM_SUBMIT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+REPO_DIR="${REPO_DIR_OVERRIDE:-${SLURM_SUBMIT_DIR:-}}"
+if [[ -z "$REPO_DIR" ]]; then
+  echo "REPO_DIR_OVERRIDE or SLURM_SUBMIT_DIR must be set" >&2
+  exit 1
+fi
 cd "$REPO_DIR"
-mkdir -p logs outputs
+mkdir -p "$REPO_DIR/logs" "$REPO_DIR/outputs"
 
 if [[ -z "${VENV_PATH:-}" && -d "$REPO_DIR/.venv_cos568" ]]; then
   VENV_PATH="$REPO_DIR/.venv_cos568"

@@ -23,6 +23,7 @@ import json
 import logging
 import os
 import random
+import socket
 import time
 
 import numpy as np
@@ -275,6 +276,11 @@ def train(args, train_dataset, model, tokenizer):
                 "rank": metrics_rank,
                 "world_size": current_world_size,
                 "sync_method": args.sync_method,
+                "hostname": socket.gethostname(),
+                "slurm_job_id": os.environ.get("SLURM_JOB_ID"),
+                "slurm_procid": os.environ.get("SLURM_PROCID"),
+                "slurm_localid": os.environ.get("SLURM_LOCALID"),
+                "device": str(args.device),
                 "num_optimization_steps": global_step,
                 "step_losses": step_losses,
                 "step_times_sec": step_times_sec,
@@ -494,6 +500,9 @@ def main():
                         help="Number of initial training steps to skip before profiling.")
     parser.add_argument("--profile_active_steps", type=int, default=3,
                         help="Number of training steps to profile after wait steps.")
+    parser.add_argument("--device_rank", type=int, default=None,
+                        help="Local device index on the current node for distributed CUDA runs. "
+                             "Defaults to SLURM_LOCALID or LOCAL_RANK when unset.")
     parser.add_argument("--local_rank", type=int, default=-1,
                         help="For distributed training: local_rank. If single-node training, local_rank defaults to -1.")
     args = parser.parse_args()
@@ -503,12 +512,25 @@ def main():
 
     # set up (distributed) training
     if args.local_rank != -1:
+        if args.device_rank is None:
+            for env_var in ("SLURM_LOCALID", "LOCAL_RANK"):
+                env_value = os.environ.get(env_var)
+                if env_value is not None:
+                    args.device_rank = int(env_value)
+                    break
+        if args.device_rank is None:
+            args.device_rank = 0
+
         use_cuda = torch.cuda.is_available() and not args.no_cuda
         if use_cuda:
             available_gpus = torch.cuda.device_count()
             if available_gpus == 0:
                 raise ValueError("Distributed CUDA training requested but no GPUs are available.")
-            device_index = args.local_rank % available_gpus
+            if args.device_rank < 0 or args.device_rank >= available_gpus:
+                raise ValueError(
+                    f"Invalid device_rank={args.device_rank} with {available_gpus} visible GPUs."
+                )
+            device_index = args.device_rank
             torch.cuda.set_device(device_index)
             args.device = torch.device("cuda", device_index)
             args.n_gpu = 1
@@ -516,17 +538,25 @@ def main():
         else:
             args.device = torch.device("cpu")
             args.n_gpu = 0
+            args.device_rank = -1
             backend = "gloo"
 
-        torch.distributed.init_process_group(
+        init_process_group_kwargs = dict(
             backend=backend,
             init_method=f"tcp://{args.master_ip}:{args.master_port}",
             world_size=args.world_size,
             rank=args.local_rank,
         )
+        if use_cuda:
+            try:
+                init_process_group_kwargs["device_id"] = args.device.index
+            except TypeError:
+                pass
+        torch.distributed.init_process_group(**init_process_group_kwargs)
     else:
         args.device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
         args.n_gpu = torch.cuda.device_count() if args.device.type == "cuda" else 0
+        args.device_rank = args.device.index if args.device.type == "cuda" else -1
         args.world_size = 1
 
     # Setup logging

@@ -1,19 +1,15 @@
 #!/bin/bash
-#SBATCH --job-name=cos568-task2a-rte
-#SBATCH --partition=mltheory
-#SBATCH --account=mltheory
+#SBATCH --job-name=cos568-task2a-rte-cpu
+#SBATCH --partition=cs
+#SBATCH --account=allcs
 #SBATCH --nodes=4
 #SBATCH --ntasks=4
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
-#SBATCH --gres=gpu:1
 #SBATCH --mem=32G
-#SBATCH --time=06:00:00
+#SBATCH --time=08:00:00
 #SBATCH --output=logs/%x-%j.out
 #SBATCH --error=logs/%x-%j.err
-## If your cluster requires these, uncomment and set them:
-##SBATCH --partition=gpu
-##SBATCH --account=your_account
 
 set -euo pipefail
 
@@ -47,11 +43,11 @@ export SYNC_METHOD="${SYNC_METHOD:-gather_scatter}"
 export ENABLE_PROFILING="${ENABLE_PROFILING:-0}"
 export PYTORCH_TRANSFORMERS_CACHE="${PYTORCH_TRANSFORMERS_CACHE:-$REPO_DIR/hf_cache}"
 if [[ "$SYNC_METHOD" == "all_reduce" ]]; then
-  DEFAULT_OUTPUT_TAG="task2b"
+  DEFAULT_OUTPUT_TAG="task2b_cpu"
 elif [[ "$SYNC_METHOD" == "ddp" ]]; then
-  DEFAULT_OUTPUT_TAG="task3"
+  DEFAULT_OUTPUT_TAG="task3_cpu"
 else
-  DEFAULT_OUTPUT_TAG="task2a"
+  DEFAULT_OUTPUT_TAG="task2a_cpu"
 fi
 export OUTPUT_DIR="${OUTPUT_DIR:-$REPO_DIR/outputs/${TASK_NAME}_${DEFAULT_OUTPUT_TAG}_ws${SLURM_NTASKS}}"
 export PROFILE_OUTPUT_DIR="${PROFILE_OUTPUT_DIR:-$OUTPUT_DIR/profiler}"
@@ -72,7 +68,7 @@ fi
 
 MASTER_ADDR=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n1)
 ALLOCATED_NODES="$(scontrol show hostnames "$SLURM_JOB_NODELIST")"
-MASTER_PORT="${MASTER_PORT:-29501}"
+MASTER_PORT="${MASTER_PORT:-29511}"
 WORLD_SIZE="${WORLD_SIZE:-$SLURM_NTASKS}"
 PER_DEVICE_TRAIN_BATCH_SIZE="${PER_DEVICE_TRAIN_BATCH_SIZE:-16}"  # 16 * 4 = 64 total batch size
 
@@ -101,7 +97,7 @@ metadata = {
     "master_port": "$MASTER_PORT",
     "sync_method": "$SYNC_METHOD",
     "enable_profiling": "$ENABLE_PROFILING" == "1",
-    "uses_cuda": True,
+    "uses_cuda": False,
     "output_dir": "$OUTPUT_DIR",
     "profile_output_dir": "$PROFILE_OUTPUT_DIR",
 }
@@ -120,7 +116,7 @@ export TRANSFORMERS_CACHE="'"$TRANSFORMERS_CACHE"'"
 export TORCH_HOME="'"$TORCH_HOME"'"
 export PYTORCH_TRANSFORMERS_CACHE="'"$PYTORCH_TRANSFORMERS_CACHE"'"
 export TMPDIR="'"$TMPDIR"'"
-echo "RANK=$SLURM_PROCID LOCAL_DEVICE_RANK=${SLURM_LOCALID:-0} HOST=$(hostname)"
+echo "RANK=$SLURM_PROCID HOST=$(hostname)"
 
 PROFILE_ARGS=()
 if [[ "${ENABLE_PROFILING}" == "1" ]]; then
@@ -149,10 +145,10 @@ python3 run_glue.py \
   --output_dir "'"$OUTPUT_DIR"'" \
   --cache_dir "'"$PYTORCH_TRANSFORMERS_CACHE"'" \
   --overwrite_output_dir \
+  --no_cuda \
   --master_ip "'"$MASTER_ADDR"'" \
   --master_port "'"$MASTER_PORT"'" \
   --world_size "'"$WORLD_SIZE"'" \
-  --device_rank "${SLURM_LOCALID:-0}" \
   --local_rank "$SLURM_PROCID" \
   "${PROFILE_ARGS[@]}" \
   "${EXTRA_ARGS[@]}" \

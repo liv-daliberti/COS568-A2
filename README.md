@@ -34,6 +34,14 @@ You may choose to either use GPUs or CPUs for this project (**Using CPUs via Clo
   ./setup_local.sh
   source ./env_local.sh
   ```
+- Included Slurm launchers in this repo:
+  - `run_task1_single_cpu.sbatch`: single-node CPU Task 1 run
+  - `run_task1_single_gpu.sbatch`: single-node GPU Task 1 run
+  - `run_task2a_4workers_cpu.sbatch`: 4-node CPU distributed run with 1 rank per node
+  - `run_task2_cpu_timing_bundle.sbatch`: runs CPU Tasks 2(a), 2(b), and 3 sequentially on one shared 4-node allocation
+  - `run_task2a_4workers.sbatch`: 4-node GPU distributed run with 1 rank per node
+  - `run_task4_cpu_profiles_bundle.sbatch`: runs the three CPU profiling jobs on one shared 4-node allocation
+  - `scripts/run_report_suite.py`: submits the full CPU+GPU experiment suite and rebuilds the report
 -  You are only required to fine-tune RTE  (one of the datasets within GLUE) in this assignment, use the python script `download_glue_data.py` to download the dataset. If you are not running experiments via CloudLab, use this command to download datasets within GLUE: 
     ```bash
     python3 download_glue_data.py --data_dir ./glue_data --tasks RTE

@@ -1,18 +1,14 @@
 #!/bin/bash
-#SBATCH --job-name=cos568-task1-rte
-#SBATCH --partition=mltheory
-#SBATCH --account=mltheory
+#SBATCH --job-name=cos568-task1-rte-cpu
+#SBATCH --partition=cs
+#SBATCH --account=allcs
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
-#SBATCH --gres=gpu:1
 #SBATCH --mem=32G
 #SBATCH --time=04:00:00
 #SBATCH --output=logs/%x-%j.out
 #SBATCH --error=logs/%x-%j.err
-## If your cluster requires these, uncomment and set them:
-##SBATCH --partition=gpu
-##SBATCH --account=your_account
 
 set -euo pipefail
 
@@ -25,7 +21,6 @@ cd "$REPO_DIR"
 
 mkdir -p "$REPO_DIR/logs"
 
-# Optional: set this to your venv path before sbatch submission.
 if [[ -z "${VENV_PATH:-}" && -d "$REPO_DIR/.venv_cos568" ]]; then
   VENV_PATH="$REPO_DIR/.venv_cos568"
 fi
@@ -42,7 +37,7 @@ export TMPDIR="${TMPDIR:-$REPO_DIR/.tmp}"
 
 export GLUE_DIR="${GLUE_DIR:-$REPO_DIR/glue_data}"
 export TASK_NAME="${TASK_NAME:-RTE}"
-export OUTPUT_DIR="${OUTPUT_DIR:-$REPO_DIR/outputs/${TASK_NAME}_task1_gpu}"
+export OUTPUT_DIR="${OUTPUT_DIR:-$REPO_DIR/outputs/${TASK_NAME}_task1_cpu}"
 export PYTORCH_TRANSFORMERS_CACHE="${PYTORCH_TRANSFORMERS_CACHE:-$REPO_DIR/hf_cache}"
 export CLEAN_OUTPUT_DIR="${CLEAN_OUTPUT_DIR:-1}"
 
@@ -76,7 +71,7 @@ metadata = {
     "ntasks": int("${SLURM_NTASKS:-1}"),
     "ntasks_per_node": int("${SLURM_NTASKS_PER_NODE:-1}"),
     "cpus_per_task": int("${SLURM_CPUS_PER_TASK:-1}"),
-    "uses_cuda": True,
+    "uses_cuda": False,
     "sync_method": "none",
     "output_dir": "$OUTPUT_DIR",
 }
@@ -96,4 +91,5 @@ python3 run_glue.py \
   --num_train_epochs 3 \
   --output_dir "$OUTPUT_DIR" \
   --cache_dir "$PYTORCH_TRANSFORMERS_CACHE" \
-  --overwrite_output_dir
+  --overwrite_output_dir \
+  --no_cuda
